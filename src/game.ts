@@ -1,115 +1,200 @@
-// Refract — the game. THIS IS THE FILE YOU IMPLEMENT.
-//
-// `src/main.ts`, `src/constants.ts` and the project's configuration are supplied
-// with the project and stay as they are. What is missing is the game: the state it
-// holds, the debug surface that poses and reads that state, and the three
-// functions below.
-//
-// FIRST, DECLARE AND EXPORT `RefractState`, exactly as `specs/state.md` fixes it,
-// and `RefractDebugApi`, the debug and automation surface
-// `specs/instrumentation.md` specifies. The stub below is written against both
-// names, so this project does not compile until they exist — the type check
-// failing on a freshly seeded workspace is the starting point, not a broken seed.
-//
-// THEN IMPLEMENT the three functions. `initialize` runs once, when the engine is
-// initialized, and returns the state and the debug surface together, as the pair
-// `[state, debug]`. `update` and `render` then run once each per frame — `update`
-// first, with the frame's delta time in SECONDS, then `render`.
-//
-// The state is a VALUE, and every frame is a transition over it. The engine hands
-// `update` the current state as a read-only view (`DeepReadonly<RefractState>`)
-// and stores whatever `update` returns as the next state; `render` is handed
-// that next state, as the same read-only view, and returns nothing. Nothing ever
-// holds a writable `RefractState`: `update` builds the next state from the current
-// one (spread the parts that change, `map` over the arrays) rather than assigning
-// into it, and a frame that returns `undefined` is refused by the engine. The
-// engine's own documentation, seeded at `engine/`, defines all of this and the
-// scoped APIs each function receives; read it before you start.
-//
-// The engine returns the surface from `engine.debug`, exactly as `initialize`
-// handed it over, which is how the game is driven from code
-// (`specs/instrumentation.md`). Because no one holds a writable state, the
-// surface is written in the shape of `update`: a pose takes the current state and
-// returns the next (`loadBoard(state, board)`), a reading takes the state and
-// returns what it read (`snapshot(state)`), and a caller drives them through
-// `engine.apply` and `engine.state`. Where its implementation lives under `src/`
-// is your call; the only fixed point is that `initialize` returns it.
-//
-// The POINTER comes from the engine as well. A beam is drawn by pressing on the
-// stage and dragging, and the engine hands `update` the pointer's position
-// already in logical stage units along with its press and release edges — the
-// engine's input documentation, seeded at `engine/`, defines the API, and
-// `specs/controls.md` states what Refract does with the three of them.
-
-import type {
-  Game,
-  InitApi,
-  RenderApi,
-  UpdateApi,
-} from "@clockwyrks/simple-2d";
+import type { Game } from "@clockwyrks/simple-2d";
 import type { DeepReadonly } from "ts-essentials";
+import * as C from "./constants";
+import {
+  initialState,
+  debug,
+  action,
+  pointerEvent,
+  snapshot,
+  complete,
+} from "./simulation";
+import { render } from "./render";
 
-/**
- * The stage background, a CSS color string. `src/main.ts` hands it to the engine
- * as the color the canvas is cleared to each frame, so the letterbox bars around
- * the stage match the bench itself. This placeholder is replaced by the build
- * with the color its bench uses.
- */
-export const BACKGROUND = "#000";
+export type Screen =
+  "title" | "howto" | "select" | "playing" | "solved" | "complete";
 
-const NOT_IMPLEMENTED = "Refract: src/game.ts is not implemented yet";
+export type Mode = "campaign" | "cascade";
 
-/**
- * The game this build's engine drives.
- *
- * Implement all three functions. Nothing else in the project needs changing for
- * the game to run: `src/main.ts` already binds this object to the engine.
- */
+export type Channel = "triangle" | "square" | "diamond";
+
+export type NodeKind = "emitter" | "lens" | "crystal";
+
+export interface Cell {
+  readonly col: number;
+  readonly row: number;
+}
+
+export interface NodeState {
+  readonly col: number;
+  readonly row: number;
+  readonly kind: NodeKind;
+  readonly channel: Channel | null;
+  readonly charges: number | null;
+}
+
+export interface BoardState {
+  readonly cols: number;
+  readonly rows: number;
+  readonly nodes: readonly NodeState[];
+}
+
+export interface BeamState {
+  readonly channel: Channel;
+  readonly cells: readonly Cell[];
+}
+
+export interface TraceState {
+  readonly channel: Channel;
+}
+
+export type PointerDevice = "mouse" | "pen" | "touch";
+
+export interface PointerState {
+  readonly x: number;
+  readonly y: number;
+  readonly down: boolean;
+  readonly device: PointerDevice;
+}
+
+export interface RefractState {
+  readonly screen: Screen;
+  readonly mode: Mode;
+  readonly menuIndex: number;
+
+  readonly board: BoardState;
+  readonly beams: readonly BeamState[];
+  readonly tracing: TraceState | null;
+
+  readonly boardIndex: number;
+  readonly solvedBoards: readonly number[];
+  readonly unlockedCount: number;
+  readonly selectIndex: number;
+
+  readonly solvedCount: number;
+  readonly tier: number;
+
+  readonly pointer: PointerState;
+  readonly armedTarget: string | null;
+  readonly simTime: number;
+  readonly muted: boolean;
+}
+
+export type RefractDebugApi = {
+  readonly [K in keyof typeof debug]: (typeof debug)[K] extends (
+    s: RefractState,
+    ...args: infer A
+  ) => infer R
+    ? (state: DeepReadonly<RefractState>, ...args: A) => R
+    : (typeof debug)[K];
+};
+export const BACKGROUND = "#080e17";
 export const game: Game<RefractState, RefractDebugApi> = {
-  /**
-   * Runs once, before any frame.
-   *
-   * Register every action in ACTIONS against its BINDINGS, define the five CUES,
-   * register the diagnostic sources specs/instrumentation.md lists — each is
-   * handed the state current at the read, so none closes over the state built
-   * here — and build the complete initial state: the title screen, with every
-   * field of RefractState set, including the fields whose mode is not the one the
-   * player will choose, which start at the resting values specs/state.md gives
-   * them. Return it beside the debug surface.
-   */
-  initialize(_api: InitApi<RefractState>): [RefractState, RefractDebugApi] {
-    throw new Error(NOT_IMPLEMENTED);
+  initialize(api) {
+    for (const name of C.ACTIONS)
+      api.input.register(name, { keys: [...C.BINDINGS[name]] });
+    const sounds = [
+      { freq: 540, freqTo: 740, durationMs: 85 },
+      { freq: 380, freqTo: 240, durationMs: 85 },
+      { freq: 720, freqTo: 1080, durationMs: 220 },
+      { freq: 520, freqTo: 1560, durationMs: 480 },
+      { freq: 240, freqTo: 100, durationMs: 180 },
+    ];
+    Object.values(C.CUES).forEach((cue, i) =>
+      api.audio.define(cue, { ...sounds[i], wave: "sine", gain: 0.12 }),
+    );
+    for (const key of ["screen", "mode"] as const)
+      api.diagnostics.register(key, (s) => s[key]);
+    for (const key of ["cols", "rows"] as const)
+      api.diagnostics.register(key, (s) => s.board[key]);
+    for (const channel of C.CHANNELS) {
+      api.diagnostics.register(`${channel} length`, (s) =>
+        Math.max(
+          0,
+          (s.beams.find((b) => b.channel === channel)?.cells.length ?? 1) - 1,
+        ),
+      );
+      api.diagnostics.register(`${channel} complete`, (s) => {
+        const beam = s.beams.find((b) => b.channel === channel);
+        return beam ? complete(s.board, beam) : false;
+      });
+    }
+    for (let row = 0; row < C.GRID_MAX_ROWS; row++)
+      api.diagnostics.register(
+        `crystals row ${row + 1}`,
+        (s) =>
+          snapshot(s)
+            .board.nodes.filter((n) => n.kind === "crystal" && n.row === row)
+            .map((n) => `${n.col + 1}: ${n.spent}/${n.charges}`)
+            .join(" · ") || "—",
+      );
+    api.diagnostics.register("solved", (s) => snapshot(s).solved);
+    api.diagnostics.register(
+      "pointer",
+      (s) => `${s.pointer.x.toFixed(1)}, ${s.pointer.y.toFixed(1)}`,
+    );
+    api.diagnostics.register("device", (s) => s.pointer.device);
+    return [initialState(), debug];
   },
-
-  /**
-   * Runs once per frame, before `render`: the next state, from the current one.
-   *
-   * `dt` is the real elapsed SECONDS of this frame, and `simTime` accumulates it
-   * on every update whatever the screen. Read the frame's actions and the pointer
-   * position and edges, resolve each pointer position in the order it arrived so
-   * a beam grows and unwinds one node at a time, run the limits in
-   * specs/beams.md over every move, play cues, and mirror the engine's mute bit
-   * into the returned state's `muted`. The value returned is what `render` draws
-   * and what the next `update` receives; `state` itself is read-only and stays as
-   * it was.
-   */
-  update(
-    _state: DeepReadonly<RefractState>,
-    _api: UpdateApi,
-    _dt: number,
-  ): RefractState {
-    throw new Error(NOT_IMPLEMENTED);
+  update(state, api, dt) {
+    let s: RefractState = { ...state, simTime: state.simTime + dt };
+    const cues = new Set<string>();
+    const transition = (next: RefractState, clearing = false) => {
+      const before = s.beams.reduce(
+        (n, b) => n + Math.max(0, b.cells.length - 1),
+        0,
+      );
+      const after = next.beams.reduce(
+        (n, b) => n + Math.max(0, b.cells.length - 1),
+        0,
+      );
+      if (clearing && before > after && next.screen === "playing")
+        cues.add(C.CUES.clear);
+      else if (s.screen === "playing" && s.board === next.board) {
+        if (after > before) cues.add(C.CUES.connect);
+        if (after < before) cues.add(C.CUES.retract);
+        for (const beam of next.beams)
+          if (
+            complete(next.board, beam) &&
+            !s.beams.some(
+              (b) => b.channel === beam.channel && complete(s.board, b),
+            )
+          )
+            cues.add(C.CUES.channelComplete);
+        if (next.screen === "solved" || next.screen === "complete")
+          cues.add(C.CUES.solved);
+      }
+      s = next;
+    };
+    for (const key of C.ACTIONS)
+      if (api.input.pressed(key)) {
+        if (key === "mute") api.audio.setMuted(!api.audio.muted());
+        else
+          transition(action(s, key), key === "clear" && s.screen === "playing");
+      }
+    for (const sample of api.input.pointerSamples())
+      if (
+        sample.primary &&
+        (sample.type === "move" || sample.button === "primary")
+      ) {
+        const clearing = sample.type === "up" && s.armedTarget === "clear";
+        transition(
+          pointerEvent(s, sample.type, sample.x, sample.y, sample.device),
+          clearing,
+        );
+      }
+    for (const cue of cues) api.audio.play(cue);
+    const pointer = api.input.pointer();
+    return {
+      ...s,
+      pointer: {
+        x: pointer.x,
+        y: pointer.y,
+        down: pointer.down,
+        device: pointer.device,
+      },
+      muted: api.audio.muted(),
+    };
   },
-
-  /**
-   * Runs once per frame, after `update`, with the state `update` returned.
-   *
-   * `api.ctx` arrives cleared and already carrying the logical transform, so draw
-   * in 1280x720 coordinates and never read the canvas element's size. The state
-   * arrives read-only, so the type is what guarantees that rendering changes
-   * nothing.
-   */
-  render(_state: DeepReadonly<RefractState>, _api: RenderApi): void {
-    throw new Error(NOT_IMPLEMENTED);
-  },
+  render,
 };

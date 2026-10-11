@@ -1,0 +1,66 @@
+// Certified starting points for bounded, solver-checked mutation.
+export const SEEDS = [
+  { tier: 1, cols: 3, rows: 3, lines: [".tt", "TtT", "tt."] },
+  { tier: 1, cols: 3, rows: 4, lines: ["...", ".Tt", "ttT", ".tt"] },
+  { tier: 1, cols: 4, rows: 3, lines: ["..tt", ".tTT", ".tt."] },
+  { tier: 1, cols: 4, rows: 4, lines: [".ttt", "tTtt", ".tTt", ".tt."] },
+  { tier: 2, cols: 4, rows: 4, lines: ["SssS", "ssss", "tTts", ".ttT"] },
+  { tier: 2, cols: 5, rows: 4, lines: [".Sst.", ".ssTt", ".sstt", ".SssT"] },
+  { tier: 3, cols: 4, rows: 4, lines: [".tt.", "tTST", ".22s", "ssSs"] },
+  {
+    tier: 3,
+    cols: 4,
+    rows: 5,
+    lines: [".ttt", ".tt.", "tTST", ".22s", "ssSs"],
+  },
+  { tier: 3, cols: 5, rows: 4, lines: ["..t.s", "ttT2s", "ttS2S", "t.Tss"] },
+  {
+    tier: 3,
+    cols: 5,
+    rows: 5,
+    lines: ["..ttt", ".t.t.", ".tTST", "..22s", ".ssSs"],
+  },
+  { tier: 4, cols: 5, rows: 4, lines: [".tTdD", ".222S", "TD.ss", "..ssS"] },
+  {
+    tier: 4,
+    cols: 5,
+    rows: 5,
+    lines: ["..tT.", "t22D.", "Tdt.s", "d2sss", "DSssS"],
+  },
+  {
+    tier: 4,
+    cols: 6,
+    rows: 4,
+    lines: [".tTdD.", ".222S.", "TD.ss.", "..ssS."],
+  },
+  {
+    tier: 4,
+    cols: 6,
+    rows: 5,
+    lines: ["...Ttd", "S2ttdd", "t32Ddd", "Tss2d.", "sS.dD."],
+  },
+  {
+    tier: 5,
+    cols: 6,
+    rows: 5,
+    lines: ["T.....", "ttDsss", "dd3222", ".dt3Ss", "DddTSs"],
+  },
+  {
+    tier: 5,
+    cols: 6,
+    rows: 6,
+    lines: [".Sd...", ".22Ddd", ".Ds3T2", "..sS3t", "..t32t", ".Tsst."],
+  },
+  {
+    tier: 5,
+    cols: 7,
+    rows: 5,
+    lines: ["...ttd.", "S2Ttdd.", "t32Ddd.", "Tss2d..", "sS.dD.."],
+  },
+  {
+    tier: 5,
+    cols: 7,
+    rows: 6,
+    lines: ["ssdd.d.", "2S.dd2d", "ssD..d.", "t2ttTdd", ".t323Dd", "ttT2Ss."],
+  },
+];
